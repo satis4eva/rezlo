@@ -1,0 +1,5 @@
+# Uploaded product photos only — never run scripts from here
+<FilesMatch "\.(php|phtml|php\d|phar|cgi|pl|py|sh)$">
+  Require all denied
+</FilesMatch>
+Options -ExecCGI -Indexes
