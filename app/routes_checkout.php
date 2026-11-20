@@ -231,11 +231,10 @@ function pay_simulate_post(): void
     }
     $approve = input('outcome') === 'approve';
     $event = [
+        'id' => 'evt_sim_' . bin2hex(random_bytes(4)),
         'type' => $approve ? 'payment.succeeded' : 'payment.failed',
-        'data' => ['object' => [
-            'id' => $session, 'status' => $approve ? 'paid' : 'declined', 'amount' => (int) $o['total_pence'],
-            'currency' => 'GBP', 'reference' => $o['ref'], 'metadata' => ['order_ref' => $o['ref']],
-        ]],
+        'created' => time(),
+        'data' => ['reference' => $o['ref'], 'session_id' => $session, 'amount' => (int) $o['total_pence'], 'currency' => 'GBP', 'payment_method' => 'card'],
     ];
     dp_handle_event($event, 'simulate');
     redirect('/checkout/return?order=' . urlencode($o['ref']));
@@ -250,11 +249,14 @@ function webhook_dpayments(): void
     $sig = (string) ($_SERVER[$hdrName] ?? '');
     if (!dp_verify_signature($raw, $sig)) {
         dp_log(null, 'webhook.bad_signature', $raw);
-        json_response(['error' => 'invalid signature'], 401);
+        json_response(['error' => 'invalid signature'], 400);
     }
     $event = json_decode($raw, true);
     if (!is_array($event)) {
         json_response(['error' => 'invalid json'], 400);
     }
-    json_response(dp_handle_event($event, 'webhook'));
+    $r = dp_handle_event($event, 'webhook');
+    $status = $r['_status'] ?? 200;
+    unset($r['_status']);
+    json_response($r, $status);
 }

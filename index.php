@@ -106,6 +106,8 @@ $routes = [
     'POST /api/v1/products/([A-Za-z0-9-]+)' => 'api_product_update',
     'GET /api/v1/enquiries'         => 'api_enquiries',
 
+    'GET /api/platform/status'      => 'api_platform_status',
+
     'GET /cron'                     => 'run_cron',
 ];
 

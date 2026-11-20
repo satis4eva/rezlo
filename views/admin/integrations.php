@@ -10,7 +10,8 @@
       <div><dt>Webhook secret</dt><dd><?= config('dpayments.webhook_secret') ? 'Set' : 'Not set' ?></dd></div>
       <div><dt>Webhook URL to give DPayments</dt><dd><code><?= e(abs_url('/webhooks/dpayments')) ?></code></dd></div>
     </dl>
-    <p class="note">Keys are set in config.php on the server, never in the admin, so they can't leak through a browser.</p>
+    <p class="note">Keys are set in config.php on the server, never in the admin, so they can't leak through a browser. Rezlo follows the DBS Commerce DPayments contract (docs/dpayments-gateway-api.md on master.dbsgroup.io).</p>
+    <form method="post"><?= csrf_field() ?><input type="hidden" name="action" value="dp_ping"><button class="btn btn-ghost" type="submit">Test DPayments connection</button></form>
   </section>
   <section class="panel">
     <h2>DBS Group master portal</h2>
@@ -21,6 +22,7 @@
       <div><dt>Events sent to</dt><dd><code><?= e(portal_endpoint()) ?></code></dd></div>
       <div><dt>Portal reads Rezlo at</dt><dd><code><?= e(abs_url('/api/v1/')) ?></code></dd></div>
       <div><dt>Inbound key</dt><dd><?= config('portal.inbound_key') ? 'Set' : 'Not set' ?></dd></div>
+      <div><dt>Master portal health check</dt><dd><?= config('portal.dbs_public_key') ? 'Enabled (' . e(abs_url('/api/platform/status')) . ')' : 'Add dbs_public_key in config.php' ?></dd></div>
       <div><dt>Events waiting</dt><dd><?= $pendingEvents ?></dd></div>
     </dl>
     <div class="row-actions">

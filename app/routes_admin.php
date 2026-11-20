@@ -297,6 +297,9 @@ function admin_integrations_post(): void
         q('UPDATE outbox SET next_attempt_at = ? WHERE sent_at IS NULL', [now()]);
         $r = portal_flush(100);
         flash(isset($r['skipped']) ? 'error' : 'success', isset($r['skipped']) ? 'The DBS portal link is turned off in config.php.' : "Sent {$r['sent']} events, {$r['failed']} failed.");
+    } elseif (input('action') === 'dp_ping') {
+        $r = dp_ping();
+        flash($r['ok'] ? 'success' : 'error', $r['ok'] ? 'DPayments accepted the API key.' : 'DPayments test failed: ' . $r['error']);
     } elseif (input('action') === 'ping') {
         portal_event('portal.ping', ['message' => 'Test event from Rezlo admin', 'site' => abs_url('/')]);
         $r = portal_flush(1);

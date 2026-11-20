@@ -87,20 +87,32 @@ function dp_create_session(array $order): array
         return ['id' => $id, 'redirect' => '/pay/simulate?session=' . $id . '&order=' . urlencode($order['ref'])];
     }
 
+    $lines = [];
+    foreach (order_items((int) $order['id']) as $i) {
+        $lines[] = ['name' => $i['name'] . ' (' . $i['sku'] . ')', 'quantity' => (int) $i['qty'], 'unit_amount' => (int) $i['unit_price_pence']];
+    }
+    if ((int) $order['vat_pence'] > 0) {
+        $lines[] = ['name' => 'VAT at ' . round(config('shop.vat_rate') * 100) . '%', 'quantity' => 1, 'unit_amount' => (int) $order['vat_pence']];
+    }
+    // Contract: amount = sum(line_items) - discount_amount + shipping_amount (see docs on master.dbsgroup.io)
     $body = [
-        'merchant_id'      => config('dpayments.merchant_id'),
-        'amount'           => (int) $order['total_pence'],
-        'currency'         => config('shop.currency', 'GBP'),
-        'reference'        => $order['ref'],
-        'description'      => 'Rezlo order ' . $order['ref'],
-        'customer'         => ['email' => $order['email'], 'name' => $order['ship_name'], 'company' => $order['ship_company']],
-        'billing_address'  => ['line1' => $order['ship_address1'], 'line2' => $order['ship_address2'], 'city' => $order['ship_city'], 'postcode' => $order['ship_postcode'], 'country' => 'GB'],
-        'return_url'       => $returnUrl,
-        'cancel_url'       => abs_url('/checkout?cancelled=' . urlencode($order['ref'])),
-        'notification_url' => abs_url('/webhooks/dpayments'),
-        'metadata'         => ['order_ref' => $order['ref'], 'brand' => config('portal.brand', 'rezlo')],
+        'merchant_id'              => config('dpayments.merchant_id'),
+        'reference'                => $order['ref'],
+        'amount'                   => (int) $order['total_pence'],
+        'currency'                 => config('shop.currency', 'GBP'),
+        'description'              => 'Rezlo order ' . $order['ref'],
+        'line_items'               => $lines,
+        'discount_amount'          => 0,
+        'shipping_amount'          => (int) $order['delivery_pence'],
+        'collect_shipping_address' => false,
+        'collect_phone'            => false,
+        'customer'                 => ['email' => $order['email'], 'name' => $order['ship_name']],
+        'success_url'              => $returnUrl,
+        'cancel_url'               => abs_url('/checkout?cancelled=' . urlencode($order['ref'])),
+        'webhook_url'              => abs_url('/webhooks/dpayments'),
+        'metadata'                 => ['platform' => 'rezlo', 'store' => parse_url(abs_url('/'), PHP_URL_HOST), 'order_ref' => $order['ref']],
     ];
-    $res = http_json('POST', dp_base() . config('dpayments.create_path'), $body, dp_headers());
+    $res = http_json('POST', dp_base() . config('dpayments.create_path'), $body, array_merge(dp_headers(), ['Idempotency-Key: ' . $order['ref'] . '-' . substr((string) $order['updated_at'], -8)]));
     dp_log((int) $order['id'], 'session.create_response', $res);
     $id = $res['data'][config('dpayments.id_field')] ?? null;
     $redirect = $res['data'][config('dpayments.redirect_field')] ?? null;
@@ -140,41 +152,56 @@ function dp_verify_signature(string $raw, string $header): bool
     if ($secret === '' || $header === '') {
         return false;
     }
-    $expected = hash_hmac('sha256', $raw, $secret);
-    // Accept "abc123", "sha256=abc123" or "t=...,v1=abc123" formats.
-    foreach (preg_split('/[,\s]+/', $header) as $part) {
-        $sig = preg_replace('/^(sha256=|v1=)/', '', trim($part));
-        if ($sig !== '' && hash_equals($expected, $sig)) {
-            return true;
-        }
+    // Contract: X-DPayments-Signature: t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<raw body>">, max 10 minutes old
+    $parts = [];
+    foreach (explode(',', $header) as $p) {
+        [$k, $v] = array_pad(explode('=', trim($p), 2), 2, '');
+        $parts[$k] = $v;
     }
-    return false;
+    $t = (int) ($parts['t'] ?? 0);
+    if (!$t || abs(time() - $t) > 600) {
+        return false;
+    }
+    return hash_equals(hash_hmac('sha256', $t . '.' . $raw, $secret), (string) ($parts['v1'] ?? ''));
+}
+
+/** GET {API}/v1/ping with the key: true when DPayments accepts the credentials. */
+function dp_ping(): array
+{
+    if (dp_mode() === 'simulate') {
+        return ['ok' => false, 'error' => 'Test mode: add keys and set mode to sandbox or live first.'];
+    }
+    $r = http_json('GET', dp_base() . config('dpayments.ping_path', '/v1/ping'), null, dp_headers(), 10);
+    return ['ok' => $r['ok'], 'error' => $r['ok'] ? '' : ('HTTP ' . $r['status'] . ' ' . substr((string) $r['error'], 0, 200))];
 }
 
 /** Applies a webhook / simulated event to its order. */
 function dp_handle_event(array $event, string $source = 'webhook'): array
 {
-    $obj = $event['data']['object'] ?? $event['data'] ?? $event;
-    $ref = $obj['metadata']['order_ref'] ?? $obj['reference'] ?? $event['reference'] ?? null;
+    $type = (string) ($event['type'] ?? '');
+    $d = $event['data'] ?? [];
+    $ref = $d['reference'] ?? ($d['metadata']['order_ref'] ?? null);
     $order = $ref ? order_by_ref((string) $ref) : null;
-    dp_log($order ? (int) $order['id'] : null, (string) ($event['type'] ?? 'event'), $event, $source);
+    dp_log($order ? (int) $order['id'] : null, $type ?: 'event', $event, $source);
     if (!$order) {
-        return ['handled' => false, 'reason' => 'order not found'];
+        return ['received' => true, 'handled' => false, 'reason' => 'order not found'];
     }
-    $statusRaw = (string) ($obj[config('dpayments.status_field')] ?? $obj['status'] ?? '');
-    if ($statusRaw === '' && isset($event['type'])) {
-        $statusRaw = str_contains($event['type'], 'succeed') || str_contains($event['type'], 'paid') ? 'paid' : (str_contains($event['type'], 'fail') ? 'failed' : '');
-    }
-    $result = dp_classify($statusRaw);
-    $amount = isset($obj['amount']) ? (int) $obj['amount'] : null;
-    if ($result === 'paid') {
-        if ($amount !== null && $amount !== (int) $order['total_pence']) {
-            dp_log((int) $order['id'], 'amount_mismatch', ['expected' => $order['total_pence'], 'got' => $amount], $source);
-            return ['handled' => false, 'reason' => 'amount mismatch'];
+    if ($type === 'payment.succeeded') {
+        if ((int) ($d['amount'] ?? -1) !== (int) $order['total_pence']) {
+            dp_log((int) $order['id'], 'amount_mismatch', ['expected' => $order['total_pence'], 'got' => $d['amount'] ?? null], $source);
+            return ['received' => true, 'handled' => false, 'reason' => 'amount mismatch', '_status' => 422];
         }
-        order_mark_paid($order, 'dpayments', (string) ($obj['id'] ?? ''));
-    } elseif ($result === 'failed' && $order['payment_status'] !== 'paid') {
-        update('orders', ['status' => 'payment_failed', 'payment_status' => 'failed', 'updated_at' => now()], 'id = :id', ['id' => $order['id']]);
+        order_mark_paid($order, 'dpayments', (string) ($d['session_id'] ?? $order['gateway_ref']));
+        return ['received' => true, 'handled' => true, 'result' => 'paid', 'order' => $order['ref']];
     }
-    return ['handled' => true, 'result' => $result, 'order' => $order['ref']];
+    if (in_array($type, ['payment.failed', 'payment.expired'], true) && $order['payment_status'] !== 'paid') {
+        update('orders', ['status' => 'payment_failed', 'payment_status' => 'failed', 'updated_at' => now()], 'id = :id', ['id' => $order['id']]);
+        return ['received' => true, 'handled' => true, 'result' => 'failed', 'order' => $order['ref']];
+    }
+    if ($type === 'payment.refunded') {
+        update('orders', ['payment_status' => 'refunded', 'updated_at' => now()], 'id = :id', ['id' => $order['id']]);
+        order_set_status(order_by_ref($order['ref']), 'refunded');
+        return ['received' => true, 'handled' => true, 'result' => 'refunded', 'order' => $order['ref']];
+    }
+    return ['received' => true, 'handled' => false, 'reason' => 'ignored event'];
 }

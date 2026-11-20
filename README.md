@@ -51,9 +51,11 @@ Set in `config.php`:
 ```
 
 - **Simulate mode** (default) runs a built-in test payment page so the whole order flow works before keys arrive. No money moves.
-- **Flow:** `POST {api_base}/v1/checkout/sessions` → redirect buyer to the returned `checkout_url` → DPayments calls `https://rezloltd.co.uk/webhooks/dpayments` and returns the buyer to `/checkout/return?order=REF`. Either marks the order paid (idempotent, and the amount must match the order total).
-- **Request body sent:** `merchant_id, amount (pence), currency, reference, description, customer{email,name,company}, billing_address, return_url, cancel_url, notification_url, metadata{order_ref, brand:"rezlo"}`. Headers: `Authorization: Bearer <api_key>`, `X-Merchant-Id`.
-- **Webhook:** header `X-DPayments-Signature` = HMAC-SHA256 of the raw body with `webhook_secret` (hex, `sha256=hex` or `t=…,v1=hex` accepted). Body must contain the order ref in `data.object.metadata.order_ref` or `reference`, and a status such as `paid`/`succeeded`.
+- Rezlo follows the DBS Commerce DPayments contract (`docs/dpayments-gateway-api.md` on master.dbsgroup.io).
+- **Flow:** `POST {api_base}/v1/checkout/sessions` (with `Idempotency-Key`) → redirect buyer to the returned `url` → DPayments calls `https://rezloltd.co.uk/webhooks/dpayments` and returns the buyer to `/checkout/return?order=REF`. Either marks the order paid (idempotent, and the amount must match the order total).
+- **Request body sent:** `merchant_id, reference, amount (pence), currency, description, line_items[{name,quantity,unit_amount}]` (products ex VAT plus a VAT line), `discount_amount, shipping_amount, success_url, cancel_url, webhook_url, metadata`. Header `Authorization: Bearer <api_key>`.
+- **Webhook:** `X-DPayments-Signature: t=<unix>,v1=<hex HMAC-SHA256 of "<t>.<raw body>">`, rejected if older than 10 minutes. Handles `payment.succeeded` (amount must match), `payment.failed`, `payment.expired`, `payment.refunded`, reading `data.reference` and `data.amount`.
+- **Connection test:** `GET /v1/ping` from Admin → Payments and portal → Test DPayments connection.
 - If the real DPayments API uses different paths or field names, change `create_path`, `retrieve_path`, `redirect_field`, `id_field`, `status_field`, `paid_statuses` in config — no code changes needed. The client is in `app/dpayments.php`.
 
 ## DBS Group master portal
@@ -68,6 +70,10 @@ Set in `config.php`:
   'inbound_key' => '...',     // portal → Rezlo
 ]
 ```
+
+### Store health on master.dbsgroup.io
+
+Rezlo answers the master portal's signed health check at `GET /api/platform/status?t=<unix>&sig=<Ed25519 sig of "status:<host>:<t>">`, the same contract as DBS Commerce stores. Set `portal.dbs_public_key` in `config.php` to the DBS licence public key. Add Rezlo in the master portal under **Clients** with domain `rezloltd.co.uk` and press **Check now**.
 
 ### Events Rezlo pushes to the portal
 

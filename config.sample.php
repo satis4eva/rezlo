@@ -71,12 +71,13 @@ return [
         // Match these to the DPayments API reference if they differ:
         'create_path'     => '/v1/checkout/sessions',
         'retrieve_path'   => '/v1/checkout/sessions/{id}',
-        'redirect_field'  => 'checkout_url',     // field in the create response holding the hosted payment page URL
+        'ping_path'       => '/v1/ping',
+        'redirect_field'  => 'url',              // field in the create response holding the hosted payment page URL
         'id_field'        => 'id',
         'status_field'    => 'status',
         'paid_statuses'   => ['paid', 'succeeded', 'captured', 'approved', 'completed'],
         'failed_statuses' => ['failed', 'declined', 'cancelled', 'expired'],
-        'signature_header'=> 'X-DPayments-Signature', // HMAC-SHA256 of the raw body with webhook_secret
+        'signature_header'=> 'X-DPayments-Signature', // t=<unix>,v1=<hex HMAC-SHA256 of "<t>.<raw body>"> with webhook_secret
     ],
 
     'portal' => [
@@ -88,6 +89,7 @@ return [
         'api_key'        => '',   // bearer token Rezlo uses when calling the portal
         'signing_secret' => '',   // HMAC secret for X-DBS-Signature on outgoing events
         'inbound_key'    => '',   // bearer token the portal uses when calling https://rezloltd.co.uk/api/v1/...
+        'dbs_public_key' => '',   // DBS licence public key (base64) — lets master.dbsgroup.io read /api/platform/status
         'powered_by'     => true, // "Powered by dbsgroup.io" in the footer
     ],
 

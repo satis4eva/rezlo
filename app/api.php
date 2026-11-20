@@ -142,3 +142,52 @@ function api_enquiries(): void
     api_auth();
     json_response(['data' => rows('SELECT id, ref, kind, name, company, email, phone, postcode, service, message, status, created_at FROM enquiries ORDER BY id DESC LIMIT 500')]);
 }
+
+/**
+ * Store health for the DBS master portal (master.dbsgroup.io).
+ * The portal signs "status:<host>:<unix time>" with the DBS Ed25519 key; only it can read this.
+ */
+function api_platform_status(): void
+{
+    $pub = base64_decode((string) config('portal.dbs_public_key'), true);
+    $t = (int) ($_GET['t'] ?? 0);
+    $host = strtolower((string) ($_SERVER['HTTP_HOST'] ?? ''));
+    $sigB64 = strtr((string) ($_GET['sig'] ?? ''), '-_', '+/');
+    $sig = base64_decode($sigB64 . str_repeat('=', (4 - strlen($sigB64) % 4) % 4), true) ?: '';
+    $ok = $pub && strlen($pub) === SODIUM_CRYPTO_SIGN_PUBLICKEYBYTES && $t && abs(time() - $t) < 300
+        && strlen($sig) === SODIUM_CRYPTO_SIGN_BYTES
+        && sodium_crypto_sign_verify_detached($sig, "status:$host:$t", $pub);
+    if (!$ok) {
+        json_response(['error' => 'forbidden'], 403);
+    }
+    header('Cache-Control: no-store');
+    $since = date('Y-m-d', strtotime('-30 days'));
+    $paid = "payment_status = 'paid'";
+    $payments = [];
+    if (dp_card_available()) $payments[] = 'dpayments';
+    if (config('shop.bank_transfer.account_number')) $payments[] = 'bank transfer';
+    $payments[] = 'on account';
+    json_response([
+        'brand' => config('company.trading_name', 'Rezlo') . ' (' . config('company.name') . ')',
+        'version' => 'rezlo-1.1',
+        'php' => PHP_VERSION,
+        'licence_ok' => true,
+        'licence_msg' => 'Custom DBS build (no licence key needed)',
+        'plan' => 'custom',
+        'demo' => false,
+        'orders_30d' => (int) val('SELECT COUNT(*) FROM orders WHERE created_at >= ?', [$since]),
+        'revenue_30d' => (int) val("SELECT COALESCE(SUM(total_pence),0) FROM orders WHERE $paid AND created_at >= ?", [$since]) / 100,
+        'revenue_total' => (int) val("SELECT COALESCE(SUM(total_pence),0) FROM orders WHERE $paid") / 100,
+        'last_order_at' => val('SELECT MAX(created_at) FROM orders') ?: null,
+        'products' => (int) val('SELECT COUNT(*) FROM products WHERE active = 1'),
+        'reviews_pending' => 0,
+        'creators' => 0,
+        'users' => (int) val('SELECT COUNT(*) FROM admins'),
+        'setup_done' => true,
+        'payments' => implode(', ', $payments),
+        'connections' => ['dpayments' => dp_card_available(), 'portal_events' => portal_enabled(), 'email' => config('mail.transport') === 'mail'],
+        'modules' => ['wholesale', 'trade-accounts', 'bulk-pricing', 'quotes', 'credit-accounts'],
+        'trade_accounts_pending' => (int) val("SELECT COUNT(*) FROM customers WHERE status = 'pending'"),
+        'enquiries_new' => (int) val("SELECT COUNT(*) FROM enquiries WHERE status = 'new'"),
+    ]);
+}
