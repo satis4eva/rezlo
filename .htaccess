@@ -15,7 +15,7 @@ DirectoryIndex index.php
   RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
 
   # Block private folders and files
-  RewriteRule ^(app|views|data)(/|$) - [F,L]
+  RewriteRule ^(app|views|data|tools)(/|$) - [F,L]
   RewriteRule ^(config\.php|config\.sample\.php|cron\.php|install\.php|README\.md|\.git) - [F,L,NC]
 
   # Everything else that isn't a real file goes to index.php
