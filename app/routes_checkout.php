@@ -50,8 +50,11 @@ function account_outstanding(int $customerId): int
 
 function payment_methods(array $customer, int $total): array
 {
-    $m = ['card' => 'Pay by card (secure DPayments checkout)'];
-    if (config('shop.bank_transfer.enabled')) {
+    $m = [];
+    if (dp_card_available()) {
+        $m['card'] = 'Pay by card (secure DPayments checkout)';
+    }
+    if (config('shop.bank_transfer.enabled') && config('shop.bank_transfer.account_number') && config('shop.bank_transfer.sort_code')) {
         $m['bank_transfer'] = 'Bank transfer (dispatched once payment clears)';
     }
     if ((int) $customer['credit_terms'] === 1) {
@@ -172,7 +175,7 @@ function own_order_or_404(string $ref): array
 function order_pay(string $ref): void
 {
     $o = own_order_or_404($ref);
-    if ($o['payment_status'] === 'paid' || in_array($o['status'], ['cancelled', 'refunded'], true)) {
+    if (!dp_card_available() || $o['payment_status'] === 'paid' || in_array($o['status'], ['cancelled', 'refunded'], true)) {
         redirect('/account/orders/' . $ref);
     }
     update('orders', ['payment_method' => 'card'], 'id = :id', ['id' => $o['id']]);
@@ -209,7 +212,7 @@ function order_proforma(string $ref): void
 
 function pay_simulate(): void
 {
-    if (dp_mode() !== 'simulate') {
+    if (!dp_card_available() || dp_mode() !== 'simulate') {
         not_found();
     }
     $o = own_order_or_404((string) input('order'));
@@ -218,7 +221,7 @@ function pay_simulate(): void
 
 function pay_simulate_post(): void
 {
-    if (dp_mode() !== 'simulate') {
+    if (!dp_card_available() || dp_mode() !== 'simulate') {
         not_found();
     }
     $o = own_order_or_404((string) input('order'));

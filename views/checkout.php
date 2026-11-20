@@ -26,10 +26,11 @@
 
         <fieldset>
           <legend>Payment</legend>
+          <?php if (!$methods): ?><p class="flash flash-info">Online payment isn't available for this order yet. <a href="/quote?from=cart">Send it as a quote request</a> and we'll confirm the order and payment with you directly.</p><?php endif; ?>
           <?php $sel = $_SESSION['old_now']['payment_method'] ?? array_key_first($methods); foreach ($methods as $k => $label): ?>
           <label class="radio"><input type="radio" name="payment_method" value="<?= e($k) ?>" <?= $sel === $k ? 'checked' : '' ?>> <span><?= e($label) ?></span></label>
           <?php endforeach; ?>
-          <p class="note">Card payments are taken on the secure DPayments payment page. We never see or store your card details.</p>
+          <?php if (isset($methods['card'])): ?><p class="note">Card payments are taken on the secure DPayments payment page. We never see or store your card details.</p><?php endif; ?>
         </fieldset>
 
         <label class="check"><input type="checkbox" name="accept_terms" value="1" required> <span>I confirm I'm buying for business purposes and accept the <a href="/terms" target="_blank">Trade Terms and Conditions of Sale</a>, <a href="/delivery" target="_blank">delivery</a> and <a href="/returns" target="_blank">returns</a> policies.</span></label>
@@ -48,7 +49,7 @@
           <div><dt>VAT (20%)</dt><dd><?= money($totals['vat']) ?></dd></div>
           <div class="total"><dt>Total</dt><dd><?= money($totals['total']) ?></dd></div>
         </dl>
-        <button class="btn btn-primary btn-block" type="submit">Place order</button>
+        <button class="btn btn-primary btn-block" type="submit" <?= $methods ? '' : 'disabled' ?>>Place order</button>
         <p class="note">Highlands, islands, Northern Ireland and offshore postcodes are quoted separately.</p>
       </aside>
     </form>

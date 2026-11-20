@@ -46,6 +46,15 @@ function dp_mode(): string
     return (string) config('dpayments.mode', 'simulate');
 }
 
+/** Card payments are offered when real DPayments keys are set, or in test mode on a development copy only. */
+function dp_card_available(): bool
+{
+    if (dp_mode() === 'simulate') {
+        return config('app.env') === 'development';
+    }
+    return config('dpayments.merchant_id') && config('dpayments.api_key') && config('dpayments.webhook_secret');
+}
+
 function dp_base(): string
 {
     return rtrim((string) (dp_mode() === 'live' ? config('dpayments.api_base_live') : config('dpayments.api_base_sandbox')), '/');

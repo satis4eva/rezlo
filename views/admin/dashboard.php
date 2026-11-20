@@ -1,5 +1,5 @@
 <h1>Dashboard</h1>
-<?php if (dp_mode() === 'simulate'): ?><div class="flash flash-info">Card payments are in test mode. Add your DPayments keys in config.php and set the mode to sandbox, then live. <a href="/admin/integrations">Check the setup</a></div><?php endif; ?>
+<?php if (dp_mode() === 'simulate'): ?><div class="flash flash-info">Card payments are switched off on the live site until DPayments keys are added in config.php. Customers can pay by bank transfer or on account. <a href="/admin/integrations">Check the setup</a></div><?php endif; ?>
 <div class="stats">
   <?php foreach ($stats as $label => $v): ?><div class="stat"><span class="stat-v"><?= e((string) $v) ?></span><span class="stat-l"><?= e($label) ?></span></div><?php endforeach; ?>
 </div>

@@ -7,7 +7,7 @@
     <div class="row-actions">
       <form method="post" action="/account/orders/<?= e($o['ref']) ?>/reorder"><?= csrf_field() ?><button class="btn btn-ghost" type="submit">Reorder these items</button></form>
       <?php if ($o['payment_method'] === 'bank_transfer' && $o['payment_status'] !== 'paid'): ?><a class="btn btn-ghost" href="/order/<?= e($o['ref']) ?>/proforma" target="_blank">Pro forma invoice</a><?php endif; ?>
-      <?php if ($o['payment_status'] !== 'paid' && in_array($o['status'], ['pending_payment', 'payment_failed', 'awaiting_transfer'], true)): ?>
+      <?php if (dp_card_available() && $o['payment_status'] !== 'paid' && in_array($o['status'], ['pending_payment', 'payment_failed', 'awaiting_transfer'], true)): ?>
       <form method="post" action="/order/<?= e($o['ref']) ?>/pay"><?= csrf_field() ?><button class="btn btn-primary" type="submit">Pay by card</button></form>
       <?php endif; ?>
     </div>

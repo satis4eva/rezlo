@@ -1,6 +1,6 @@
 <?php
 $paid = $o['payment_status'] === 'paid';
-$needsCard = !$paid && in_array($o['status'], ['pending_payment', 'payment_failed'], true);
+$needsCard = dp_card_available() && !$paid && in_array($o['status'], ['pending_payment', 'payment_failed'], true);
 ?>
 <section class="page-head">
   <div class="wrap">
