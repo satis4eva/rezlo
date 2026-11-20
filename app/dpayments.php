@@ -115,7 +115,7 @@ function dp_create_session(array $order): array
     $res = http_json('POST', dp_base() . config('dpayments.create_path'), $body, array_merge(dp_headers(), ['Idempotency-Key: ' . $order['ref'] . '-' . substr((string) $order['updated_at'], -8)]));
     dp_log((int) $order['id'], 'session.create_response', $res);
     $id = $res['data'][config('dpayments.id_field')] ?? null;
-    $redirect = $res['data'][config('dpayments.redirect_field')] ?? null;
+    $redirect = $res['data'][config('dpayments.redirect_field')] ?? $res['data']['url'] ?? $res['data']['checkout_url'] ?? null;
     if (!$res['ok'] || !$id || !$redirect) {
         throw new RuntimeException('DPayments did not return a checkout session (HTTP ' . $res['status'] . ').');
     }
