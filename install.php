@@ -10,6 +10,30 @@ if (PHP_SAPI !== 'cli') {
     exit;
 }
 $target = __DIR__ . '/config.php';
+
+// Update one setting later:  php install.php --set portal.dbs_public_key VALUE
+//   (values "true"/"false" become booleans, digits become integers)
+if (($argv[1] ?? '') === '--set') {
+    [$_, $_, $path, $value] = array_pad($argv, 4, null);
+    if (!is_file($target) || !$path || $value === null) {
+        fwrite(STDERR, "usage: php install.php --set section.key value\n");
+        exit(1);
+    }
+    $cfg = require $target;
+    $value = $value === 'true' ? true : ($value === 'false' ? false : (ctype_digit($value) ? (int) $value : $value));
+    $ref = &$cfg;
+    foreach (explode('.', $path) as $part) {
+        if (!is_array($ref)) { fwrite(STDERR, "bad path\n"); exit(1); }
+        $ref = &$ref[$part];
+    }
+    $ref = $value;
+    unset($ref);
+    file_put_contents($target, "<?php\n// Rezlo config — edited by install.php --set on " . date('Y-m-d H:i') . "\nreturn " . var_export($cfg, true) . ";\n");
+    chmod($target, 0600);
+    echo "set $path\n";
+    exit(0);
+}
+
 if (is_file($target)) {
     fwrite(STDERR, "config.php already exists, nothing to do\n");
     exit(0);
