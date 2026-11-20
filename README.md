@@ -23,7 +23,7 @@ Wholesale e-commerce site for **Rezlo Ltd** (rezloltd.co.uk): floor coverings, t
 
 1. **Connect the repo.** hPanel → Websites → rezloltd.co.uk → Advanced → **Git**. Repository `https://github.com/satis4eva/rezlo.git`, branch `main`, install path empty (deploys into `public_html`). Turn on auto-deployment and add the webhook to GitHub if you want pushes to deploy automatically.
 2. **PHP version.** hPanel → Advanced → PHP Configuration → PHP 8.2 or 8.3. Make sure `pdo_sqlite` (or `pdo_mysql`), `curl` and `mbstring` are enabled (they are by default).
-3. **Create `config.php`.** In File Manager, copy `config.sample.php` to `config.php` in `public_html` and fill in:
+3. **Create `config.php`.** Either run `php install.php <db_name> <db_password> <admin_password>` once on the server (it writes a production config with MySQL and generated secrets), or copy `config.sample.php` to `config.php` in File Manager. Then fill in:
    - `app.secret`, `app.admin_password`, `app.cron_key` — long random strings
    - `company.company_number` (and `vat_number`, `ico_number` if you have them)
    - `shop.bank_transfer` sort code and account number
@@ -98,6 +98,13 @@ Base `https://rezloltd.co.uk/api/v1`, header `Authorization: Bearer <inbound_key
 | GET | `/enquiries` | Quote requests and messages |
 
 Admin → **Payments and portal** shows the connection status, lets you send a test event and lists the outbox.
+
+## Live setup (done 20 Nov 2026)
+
+- Hostinger website `rezloltd.co.uk` on account `u594118951`, deployed from `satis4eva/rezlo` `main` with auto-deploy.
+- MySQL database `u594118951_rezlo`; `config.php` created on the server by `install.php` (not in Git, survives deploys).
+- Cron every 5 minutes runs `cron.php`.
+- Card payments and bank transfer stay hidden at checkout until DPayments keys and bank details are set in `config.php`.
 
 ## Local development
 
